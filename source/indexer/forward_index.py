@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 CORD-19 Forward Index Builder
 
@@ -191,19 +190,19 @@ def build_forward_index(input_dir: Path, output_dir: Path, limit: Optional[int] 
 
 if __name__ == "__main__":
     """
-    Standalone execution: Build forward index using default paths from lexicon.py
+    Build forward index using default paths from lexicon.py
     """
     default_root = lexicon.ROOT_DIR  # use existing defaults unless overridden
     default_output = Path(lexicon.OUTPUT_DIR)
     
     try:
         stats = build_forward_index(default_root, default_output, limit=None)
-        print(f"\n✓ Forward index build successful!")
+        print(f"\nForward index build successful!")
     except FileNotFoundError as e:
-        print(f"\n✗ Error: {e}")
+        print(f"\nError: {e}")
         print("  Please ensure the dataset directory exists and contains pdf_json/pmc_json folders.")
     except RuntimeError as e:
-        print(f"\n✗ Error: {e}")
+        print(f"\nError: {e}")
     except Exception as e:
-        print(f"\n✗ Unexpected error: {e}")
+        print(f"\nUnexpected error: {e}")
         raise
