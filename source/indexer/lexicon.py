@@ -1,13 +1,13 @@
 """CORD-19 Lexicon Builder
 
-Scan the corpus, tokenize text, and emit a binary ``lexicon.bin``. The module
+Scan the corpus, tokenize text, and emit a binary `lexicon.bin`. The module
 remains intentionally minimal so we can validate lexicon creation before
 layering on forward indexes or barrels.
 """
 
 import json  # JSON parsing for input documents
-import re  # regex for tokenization
 import struct  # packing/unpacking binary formats
+import unicodedata  # Unicode normalization for tokens
 from pathlib import Path  # filesystem path helpers
 from typing import Dict, Iterable, List, Tuple, Optional  # type annotations used in function signatures
 
@@ -21,17 +21,23 @@ STOPWORDS_PATH = None  # path to optional custom stopword list
 LOG_EVERY = 50  # log progress every N documents
 
 
-TOKEN_RE = re.compile(r"[a-z0-9]+")  # pattern used to extract tokens
-
 def load_stopwords() -> set:
     """Return a set of stopwords combining a built-in list and an optional file."""
+    def _norm(word: str) -> str:
+        return unicodedata.normalize("NFKC", word).lower()
+
     base = {
         "a","an","the","and","or","but","if","while","to","of","in","for",
         "on","with","as","by","is","it","this","that","be","are","from"
     }  # minimal default stopword set
+    normalized = {_norm(word) for word in base}
     if STOPWORDS_PATH and Path(STOPWORDS_PATH).exists():
-        base |= {line.strip().lower() for line in Path(STOPWORDS_PATH).read_text().splitlines()}  # extend from file
-    return base
+        normalized |= {
+            _norm(line.strip())
+            for line in Path(STOPWORDS_PATH).read_text().splitlines()
+            if line.strip()
+        }
+    return normalized
 
 def iter_source_files() -> Iterable[Tuple[str, Path]]:
     """Yield (source_tag, path). Prefers PMC version when duplicate paper_id occurs."""
@@ -50,8 +56,27 @@ def normalize_text(sections: List[Dict]) -> str:
     return "\n".join(block.get("text", "") for block in sections if block.get("text"))
 
 def tokenize(text: str, stopwords: set) -> List[str]:
-    """Return a list of tokens from text after lowercasing and stopword filtering."""
-    return [token for token in TOKEN_RE.findall(text.lower()) if token not in stopwords]
+    """Return Unicode-aware tokens with NFKC normalization and stopword filtering."""
+
+    normalized = unicodedata.normalize("NFKC", text).lower()
+    tokens: List[str] = []
+    current: List[str] = []
+
+    def _flush_current() -> None:
+        if current:
+            token = "".join(current)
+            if token and token not in stopwords:
+                tokens.append(token)
+            current.clear()
+
+    for char in normalized:
+        if char.isalnum():
+            current.append(char)
+        else:
+            _flush_current()
+
+    _flush_current()
+    return tokens
 
 class Lexicon:
     """Simple lexicon mapping tokens to incremental integer ids and back."""
@@ -84,7 +109,7 @@ class Lexicon:
 
 
 def process_document(json_path: Path) -> Dict:
-    """Load a document JSON and return a dict with `paper_id`, `title`, and `text`."""
+    """Load a document JSON and return a dict with paper_id, title, and text."""
     with json_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
