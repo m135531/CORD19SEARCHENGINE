@@ -31,6 +31,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple, Optional
 
+import numpy as np
+
 from . import lexicon
 
 
@@ -38,7 +40,13 @@ LOG_EVERY = 50
 
 
 def stream_forward_index(path: Path) -> Iterable[Tuple[int, List[int]]]:
-    """Stream (doc_id, token_ids) from the forward_index.bin file."""
+    """Stream (doc_id, token_ids) from the forward_index.bin file.
+
+    Token IDs are exposed as NumPy uint32 arrays for efficient downstream
+    operations (e.g., uniqueness and positional analysis) while preserving
+    compatibility with existing list-based consumers (NumPy arrays remain
+    iterable and can be converted to lists when needed).
+    """
     with path.open("rb") as f:
         header = f.read(4)
         if len(header) < 4:
@@ -51,7 +59,12 @@ def stream_forward_index(path: Path) -> Iterable[Tuple[int, List[int]]]:
                 break
             doc_id, token_count = struct.unpack("<II", hdr)
             token_blob = f.read(4 * token_count) if token_count else b""
-            token_ids = list(struct.unpack(f"<{token_count}I", token_blob)) if token_count else []
+            if token_count:
+                # View the raw bytes as a contiguous uint32 array without
+                # per-element unpacking overhead.
+                token_ids = np.frombuffer(token_blob, dtype="<u4").copy()
+            else:
+                token_ids = np.array([], dtype=np.uint32)
             yield doc_id, token_ids
             docs_read += 1
 
@@ -177,9 +190,16 @@ def build_barrels(forward_index_path: Path, output_dir: Path, num_barrels: int =
     print(f"[Barrels] PASS 1: scanning forward index {forward_index_path}")
     for doc_idx, token_ids in stream_forward_index(forward_index_path):
         total_docs += 1
-        unique = set(token_ids)
-        for tid in unique:
-            token_doc_counts[tid] += 1
+        # NumPy's vectorized uniqueness on the per-document token array
+        # to reduce Python overhead when documents contain many repeated
+        # tokens. We then update the Python dict once per unique token.
+        if isinstance(token_ids, np.ndarray):
+            unique_ids = np.unique(token_ids)
+        else:
+            unique_ids = set(token_ids)
+
+        for tid in unique_ids:
+            token_doc_counts[int(tid)] += 1
         if total_docs % log_every == 0:
             print(f"[Barrels] scanned {total_docs} documents, tokens observed={len(token_doc_counts)}")
 
@@ -222,7 +242,7 @@ def build_barrels(forward_index_path: Path, output_dir: Path, num_barrels: int =
         # build positions per token for this doc
         pos_map: Dict[int, List[int]] = defaultdict(list)
         for pos, tid in enumerate(token_ids):
-            pos_map[tid].append(pos)
+            pos_map[int(tid)].append(pos)
 
         for tid, positions in pos_map.items():
             freq = len(positions)

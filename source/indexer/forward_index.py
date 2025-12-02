@@ -24,6 +24,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import numpy as np
+
 from . import lexicon  # reuse iter_source_files, process_document, tokenize, Lexicon, load_stopwords
 
 
@@ -58,9 +60,14 @@ def _serialize_forward_index(records: Sequence[Tuple[int, List[int]]], output_pa
     with output_path.open("wb") as f:
         f.write(struct.pack("<I", len(records)))
         for doc_id, token_ids in records:
-            f.write(struct.pack("<II", doc_id, len(token_ids)))
-            if token_ids:
-                f.write(struct.pack(f"<{len(token_ids)}I", *token_ids))
+            # Use NumPy for efficient contiguous uint32 buffers when writing
+            # large token sequences. This keeps the on-disk binary format
+            # identical while avoiding construction of large Python argument
+            # lists for struct.pack.
+            token_array = np.asarray(token_ids, dtype=np.uint32)
+            f.write(struct.pack("<II", doc_id, int(token_array.size)))
+            if token_array.size:
+                f.write(token_array.tobytes(order="C"))
 
 
 def _write_doc_metadata(metadata: Sequence[Tuple[int, str]], output_path: Path) -> None:
