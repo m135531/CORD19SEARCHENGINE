@@ -12,10 +12,10 @@ from pathlib import Path  # filesystem path helpers
 from typing import Dict, Iterable, List, Tuple, Optional  # type annotations used in function signatures
 
 # CONFIGURATION
-ROOT_DIR = Path(r"M:\CORD19DATASET\document_parses")  # base dataset folder
+ROOT_DIR = Path(r"D:\DSA\CORD19DATASET\document_parses")  # base dataset folder
 PDF_DIR = ROOT_DIR / "pdf_json"  # pdf-parsed JSON files
 PMC_DIR = ROOT_DIR / "pmc_json"  # pmc-parsed JSON files (prefer these when duplicates exist)
-OUTPUT_DIR = Path(r"C:\DSAPROJ\CORD19SEARCHENGINE\storage")  # where index outputs are written
+OUTPUT_DIR = Path(r"D:\DSA\CORD19SEARCHENGINE\tmp_output")  # where index outputs are written
 
 STOPWORDS_PATH = None  # path to optional custom stopword list
 LOG_EVERY = 50  # log progress every N documents
@@ -162,5 +162,5 @@ def build_lexicon(output_dir: Path = OUTPUT_DIR, limit: Optional[int] = None) ->
 
 
 if __name__ == "__main__":
-    summary = build_lexicon()
+    summary = build_lexicon()  # no limit parameter = process all documents
     print(f"Lexicon build complete: {summary['documents_indexed']} docs, {summary['unique_terms']} unique terms.")

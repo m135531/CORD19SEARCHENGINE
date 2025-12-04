@@ -282,43 +282,7 @@ def build_inverted_index(forward_index_path: Path, output_dir: Path, num_buckets
 
 
 if __name__ == "__main__":
-    """
-    Build inverted index from forward_index.bin
-    """
-    import sys
-    from pathlib import Path
-    
-    # Try to find forward_index.bin in common locations
-    possible_paths = [
-        Path("storage") / "forward_index.bin",
-        Path("forward_index.bin"),
-        Path("../storage/forward_index.bin"),
-    ]
-    
-    forward_path = None
-    for path in possible_paths:
-        if path.exists():
-            forward_path = path
-            break
-    
-    if forward_path is None:
-        print("Error: Could not find forward_index.bin")
-        print("  Searched in:")
-        for path in possible_paths:
-            print(f"    - {path.absolute()}")
-        print("\n  Please specify the path to forward_index.bin as an argument:")
-        print("    python inverted_index.py <path_to_forward_index.bin>")
-        sys.exit(1)
-    
-    default_output = forward_path.parent
-    
-    try:
-        stats = build_inverted_index(forward_path, default_output)
-        print(f"\n Inverted index build successful!")
-    except FileNotFoundError as e:
-        print(f"\n Error: {e}")
-    except RuntimeError as e:
-        print(f"\n Error: {e}")
-    except Exception as e:
-        print(f"\n Unexpected error: {e}")
-        raise
+    forward_path = Path(r"D:\DSA\CORD19SEARCHENGINE\tmp_forward\forward_index.bin")
+    output_path = Path(r"D:\DSA\CORD19SEARCHENGINE\tmp_inverted")
+    stats = build_inverted_index(forward_path, output_path)
+    print(f"[InvertedIndex] Build Complete!\n  Documents indexed: {stats['documents_indexed']}")
