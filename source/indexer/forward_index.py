@@ -196,20 +196,7 @@ def build_forward_index(input_dir: Path, output_dir: Path, limit: Optional[int] 
 
 
 if __name__ == "__main__":
-    """
-    Build forward index using default paths from lexicon.py
-    """
-    default_root = lexicon.ROOT_DIR  # use existing defaults unless overridden
-    default_output = Path(lexicon.OUTPUT_DIR)
-    
-    try:
-        stats = build_forward_index(default_root, default_output, limit=None)
-        print(f"\nForward index build successful!")
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
-        print("  Please ensure the dataset directory exists and contains pdf_json/pmc_json folders.")
-    except RuntimeError as e:
-        print(f"\nError: {e}")
-    except Exception as e:
-        print(f"\nUnexpected error: {e}")
-        raise
+    default_root = Path(r"D:\DSA\CORD19DATASET\document_parses")
+    default_output = Path(r"D:\DSA\CORD19SEARCHENGINE\tmp_forward")
+    stats = build_forward_index(default_root, default_output)  # no limit = all docs
+    print(f"[ForwardIndex] Build Complete!\n  Documents indexed: {stats['documents_indexed']}")
