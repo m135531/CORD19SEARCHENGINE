@@ -164,3 +164,115 @@ def rank_single_query(docs):
         List of (score, doc_id) tuples sorted by score descending
     """
     return rank_docs(docs, intersections=None)
+
+
+def intersect(doc_lists):
+    """
+    Compute cumulative intersections of multiple query terms.
+    
+    Args:
+        doc_lists: List of doc lists, one per query term.
+                   Each doc list is [(doc_id, hit_list), ...]
+    
+    Returns:
+        List of intersection dicts, where intersections[i] contains docs
+        that match the first i+1 query terms.
+        Each value is True if intersection has relevant (non-TEXT) hits.
+    """
+    if len(doc_lists) <= 1:
+        return []
+    
+    # Convert each doc list to {doc_id: is_relevant(hit_list)}
+    doc_dicts = [
+        {doc[0]: is_relevant(doc[1]) for doc in doc_list}
+        for doc_list in doc_lists
+    ]
+    
+    intersections = [doc_dicts[0]]
+    
+    # Compute cumulative intersections
+    for i in range(1, len(doc_dicts)):
+        this_intersection = {}
+        for doc_id in doc_dicts[i]:
+            if doc_id in intersections[i - 1]:
+                # Doc matches current term AND all previous terms
+                both_relevant = (
+                    doc_dicts[i][doc_id] and 
+                    intersections[i - 1][doc_id]
+                )
+                this_intersection[doc_id] = both_relevant
+        intersections.append(this_intersection)
+    
+    return intersections
+
+
+def rank_multi_query(doc_lists_per_word, normalize=True):
+    """
+    Rank documents for a multi-word query.
+    
+    Args:
+        doc_lists_per_word: Dict mapping word -> [(doc_id, hit_list), ...]
+        normalize: If True, divide final score by number of words
+    
+    Returns:
+        List of (score, doc_id) tuples sorted by score descending
+    """
+    if not doc_lists_per_word:
+        return []
+    
+    query_words = list(doc_lists_per_word.keys())
+    doc_lists = [doc_lists_per_word[word] for word in query_words]
+    
+    # Compute intersections for boost detection
+    intersections = intersect(doc_lists)
+    
+    # Score each document per word
+    scores = {}
+    
+    for word, doc_list in zip(query_words, doc_lists):
+        ranked = rank_docs(doc_list, intersections)
+        for score, doc_id in ranked:
+            scores.setdefault(doc_id, 0)
+            scores[doc_id] += score
+    
+    # Apply intersection boost: documents matching all words get multiplier
+    if intersections:
+        deepest_intersection = intersections[-1]  # all words matched
+        for doc_id in scores:
+            if doc_id in deepest_intersection:
+                # Document contains all query words
+                if deepest_intersection[doc_id]:
+                    # Intersection has relevant (non-TEXT) hits
+                    scores[doc_id] *= 3  # aggressive boost for all-word match in special fields
+                else:
+                    # Intersection only has TEXT hits
+                    scores[doc_id] *= 1.5  # modest boost
+    
+    # Normalize by number of query words (optional)
+    if normalize and len(query_words) > 1:
+        scores = {
+            doc_id: score / len(query_words)
+            for doc_id, score in scores.items()
+        }
+    
+    # Sort and return
+    final_ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return [(score, doc_id) for doc_id, score in final_ranked]
+
+
+def rank_query(query_words, doc_lists_per_word):
+    """
+    Unified entry point for single or multi-word ranking.
+    
+    Args:
+        query_words: List of query terms (can be length 1 or more)
+        doc_lists_per_word: Dict mapping word -> [(doc_id, hit_list), ...]
+    
+    Returns:
+        List of (score, doc_id) tuples sorted by score descending
+    """
+    if len(query_words) == 1:
+        word = query_words[0]
+        return rank_single_query(doc_lists_per_word[word])
+    else:
+        return rank_multi_query(doc_lists_per_word, normalize=True)
